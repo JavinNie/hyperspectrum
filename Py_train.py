@@ -34,14 +34,12 @@ def Dataset_Gen(N_samples):
     labelset = []
     x=(np.arange(0,m)-m/2)*4/m
     for ii in range(N_samples):
-        # sig 1
-        u=np.random.rand()*x.max()-x.max()/2
-        d=np.random.rand()/2
-        sig = Gaussian(x, u, d)
-        # sig 2
-        u=np.random.rand()*x.max()-x.max()/2
-        d=np.random.rand()/2
-        sig = sig+Gaussian(x, u, d)
+        num_peak=np.random.randint(1,8)
+        sig=0
+        for ii in range(num_peak):
+            u = np.random.rand() * x.max() - x.max() / 2
+            d = np.random.rand() / 2
+            sig = sig+Gaussian(x, u, d)
         # norm
         sig = sig * 1/(sig.max()+1e-10)
         coded_sig=np.dot(Filter,sig)
@@ -51,8 +49,13 @@ def Dataset_Gen(N_samples):
         # plt.plot(para_set.T)
         # plt.show()
     para_set=np.array(paraset)#每个点的数值不超过1，因此将其除以总点数，避免因为点数多少，影响幅值高低
+
     #norm
+    outmat = {"coded_norm_coe": para_set.max()}
+    scio.savemat("coded_norm_coe.mat", outmat)
+    print(para_set.max())
     para_set=para_set/para_set.max()
+    # para_set = para_set / 100
 
     label_set = np.array(labelset)
     return para_set,label_set
@@ -78,7 +81,7 @@ def Gaussian(x, u, d):
     ### 代码结束 ###
 # 对不同的参量分别归一化
 
-paraset,labelset=Dataset_Gen(5)
+# paraset,labelset=Dataset_Gen(5)
 
 # 数据集划分
 def train_test_split(data, test_size=0.3, shuffle=False, random_state=None):
@@ -181,6 +184,7 @@ if __name__ == "__main__":
     n_feature = train_features.shape[1]
     n_output = train_labels.shape[1]
     net = Net(n_feature, n_output)
+    best_net=Net(n_feature, n_output)
     # 网络权重初始化
     net.apply(weight_init)
 
@@ -200,7 +204,6 @@ if __name__ == "__main__":
     # tensorboard定义及调用命令
     TBwriter = SummaryWriter('./log')
     # tensorboard - -logdir =./ log
-    best_net=net
     best_eval_loss=1e10
     ibatch = 0
     #draw

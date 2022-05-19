@@ -1,11 +1,14 @@
 %% 20220517
 %% 抗噪测试
 %% 加载滤波器矩阵5 --best-best
+tic
 % load('D:\document\Research\Sprctrum\3D_data\Au_LC32_2circle.mat')
 % A=Au_LC32_2circle;
 % A=SpecFilters16;%滤波器矩阵，每一列是一个滤波器特性曲线
-A=TT;
-
+load('FilterHX.mat')
+A=A;
+global DNN_train_flag
+DNN_train_flag=0;
 %% 滤波器矩阵维度
 [m,n]=size(A);%行数 %列数
 wavelength=[1200,1700];%波段范围
@@ -27,16 +30,48 @@ sig=test_sig_gen(m);
 
 %% 重建测试,计算抗噪能力和重建效果
 
-reconstruct_fun=@PINV_methods;
+% reconstruct_fun=@PINV_methods;
+reconstruct_fun=@DNN_methods;
 [SNR_lower,corr_coe_recons]=Noise_resist_test(sig,A,reconstruct_fun,wavelength,plot_flag);
 
 disp(['滤波器自身相关度(0~1):' num2str(ave_corr)])
 disp(['重建不失真的最低信噪比:(0~200):' num2str(SNR_lower)])
 disp(['重建波形和目标波形相关度(1~0):' num2str(corr_coe_recons)])
 
+toc
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% 子函数0.0
+function status=DNN_train(A)
+    save('Filter.mat','A')
+    command = 'python Py_train.py';
+    status = system(command);
+    
+end
+
+%% 子函数0.1
+function sig_sim=DNN_methods(A,B)
+%输入A：[nfilter,samples]
+%输入B：[nfilter,1]
+%输出sig_sim：[samples,1]
+    global DNN_train_flag
+    if DNN_train_flag==0
+        status_train=DNN_train(A);
+        DNN_train_flag=1;    
+    end
+    load("coded_norm_coe.mat")
+    B=B/coded_norm_coe;
+    save('coded_sig.mat','B')
+    command = 'python Py_test.py';
+    status_test = system(command);
+    load("decoded_sig.mat")
+    sig_sim=decoded_sig';
+end
 %% 子函数1
 function sig_sim=PINV_methods(A,B)
+%输入A：[nfilter,samples]
+%输入B：[nfilter,1]
+%输出sig_sim：[samples,1]
     sig_sim=pinv(A)*B;
 end
 
@@ -246,12 +281,12 @@ for jj=1:3
 end
 
 % 大小尖峰
-ratio_peak=[3,5,10];
+ratio_peak=[1,2,3];
 for jj=1:3
     rp=ratio_peak(jj);
-    mul=[0,0.4*max(x)];
-    sigma=0.3*[1,1/rp/3];    
-    Amp=[1,10];
+    mul=[-0.4*max(x),0.4*max(x)];
+    sigma=0.3*[1,1/rp];    
+    Amp=[1,1];
     sig=mul_gaussian(mul,sigma,Amp,m);
     Amp=1/max(sig);
     sig=Amp*sig;
