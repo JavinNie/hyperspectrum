@@ -47,9 +47,9 @@ def Dataset_Gen(N_samples):
         paraset.append(coded_sig)
         labelset.append(sig)
         # # 双峰的就行
-        # plt.plot(labelset.T)
+        # plt.plot(para_set.T)
         # plt.show()
-    para_set=np.array(paraset)/m#每个点的数值不超过1，因此将其除以总点数，避免因为点数多少，影响幅值高低
+    para_set=np.array(paraset)#每个点的数值不超过1，因此将其除以总点数，避免因为点数多少，影响幅值高低
     label_set = np.array(labelset)
     return para_set,label_set
 
@@ -182,8 +182,8 @@ if __name__ == "__main__":
 
     # # 定义优化器, SGD Adam等
     # optimizer = torch.optim.SGD(net.parameters(), lr=1e-3, momentum=0.9)  # , weight_decay=1e-4)
-    optimizer = torch.optim.Adam(net.parameters(), lr=5e-2, betas=(0.5, 0.99))
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    optimizer = torch.optim.Adam(net.parameters(), lr=5e-3, betas=(0.5, 0.99))
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
     # # 调用损失函数
     # criterion = My_loss()
@@ -230,20 +230,32 @@ if __name__ == "__main__":
             best_net=net
             best_eval_loss=eval_loss
         net=best_net#更新最佳模型
+        current_lr=optimizer.state_dict()['param_groups'][0]['lr']
         eval_losses.append(eval_loss)
         writer.add_scalar('evalloss', eval_loss, i)
-        print('epoch: {}, trainloss: {}, evalloss: {}'.format(i, train_loss / len(train_data), eval_loss / len(test_data)))
+        print('epoch: {}, trainloss: {}, evalloss: {}, current_lr: {}'.format(i, train_loss / len(train_data), eval_loss / len(test_data),current_lr))
+        # Draw
+        num = np.random.randint(0, edata.shape[0])
+        yy = y_pred.detach().numpy()
+        el = elabel.detach().numpy()
+        plt.clf()
+        plt.plot(yy[num, :])
+        plt.ion()
+        plt.plot(el[num, :])
+        plt.legend(['pred', 'ori'])
+        plt.pause(0.01)
+        plt.ioff()
     #
-    num = 5
-    y_pred = net(edata)
-    yy = y_pred.detach().numpy()
-    el = elabel.detach().numpy()
-    plt.figure()
-    plt.plot(yy[num,:])
-    plt.ion()
-    plt.plot(el[num,:])
-    plt.legend(['pred','ori'])
-    plt.ioff()
-    plt.show()
+    # num = 5
+    # y_pred = net(edata)
+    # yy = y_pred.detach().numpy()
+    # el = elabel.detach().numpy()
+    # plt.figure()
+    # plt.plot(yy[num,:])
+    # plt.ion()
+    # plt.plot(el[num,:])
+    # plt.legend(['pred','ori'])
+    # plt.ioff()
+    # plt.show()
     # #保存模型
-    torch.save(net,'decoder_net.pth')
+    torch.save(best_net,'decoder_net.pth')
