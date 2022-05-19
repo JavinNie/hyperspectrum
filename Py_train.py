@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
 from torch.utils.tensorboard import SummaryWriter
 import scipy.io as scio
 from datetime import datetime
@@ -15,7 +16,7 @@ from sklearn.utils import shuffle as reset
 from scipy.interpolate import interpn
 from sklearn.preprocessing import MinMaxScaler
 from sklearn import metrics
-
+import matplotlib.animation as animation
 
 
 # 加载生成数据集
@@ -114,11 +115,11 @@ class Net(torch.nn.Module):  # 继承 torch 的 Module
     def __init__(self, n_feature, n_output):
         super(Net, self).__init__()  # 继承 __init__ 功能
         # 定义每层用什么样的形式
-        self.layer1 = torch.nn.Linear(n_feature, 64)  #
-        self.layer2 = torch.nn.Linear(64, 256)  #
+        self.layer1 = torch.nn.Linear(n_feature, 128)  #
+        self.layer2 = torch.nn.Linear(128, 256)  #
         self.layer3 = torch.nn.Linear(256, 512)
         self.layer4 = torch.nn.Linear(512, n_output)
-        # self.layer5 = torch.nn.Linear(256, 64)
+        # self.layer5 = torch.nn.Linear(512, n_output)
         # self.layer6 = torch.nn.Linear(64, n_output)
     def forward(self, x):  # 这同时也是 Module 中的 forward 功能
         # x = x.to(torch.float32)
@@ -185,7 +186,7 @@ if __name__ == "__main__":
 
     # # 定义优化器, SGD Adam等
     # optimizer = torch.optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
-    optimizer = torch.optim.Adam(net.parameters(), lr=1e-2, betas=(0.5, 0.99))
+    optimizer = torch.optim.Adam(net.parameters(), lr=5e-3, betas=(0.5, 0.99))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
@@ -197,12 +198,18 @@ if __name__ == "__main__":
     losses = []  # 记录每次迭代后训练的loss
     eval_losses = []  # 测试的
     # tensorboard定义及调用命令
-    writer = SummaryWriter('./log')
+    TBwriter = SummaryWriter('./log')
     # tensorboard - -logdir =./ log
     best_net=net
     best_eval_loss=1e10
     ibatch = 0
-    for i in range(200):
+    #draw
+    fig = plt.figure(figsize=(5, 5))
+    # ax = fig.add_subplot(1, 1, 1, facecolor='white')
+    plt.rcParams['font.size'] = 15
+    ims = []  # 将每一帧都存进去
+    # 循环训练
+    for i in range(100):
         train_loss = 0
         for tdata, tlabel in train_data:
             # 前向传播
@@ -216,9 +223,8 @@ if __name__ == "__main__":
             # # 累计单批次误差
             train_loss = train_loss + loss.item()
             ibatch = ibatch + 1
-
-        losses.append(train_loss / len(train_data))
-        writer.add_scalar('loss', train_loss / len(train_data), i)
+        train_loss=train_loss / len(train_data)
+        TBwriter.add_scalar('loss', train_loss, i)
 
         # 测试集进行测试
         eval_loss = 0
@@ -232,35 +238,34 @@ if __name__ == "__main__":
         if eval_loss<best_eval_loss:
             best_net=net
             best_eval_loss=eval_loss
-        # net=best_net#更新最佳模型
+        net=best_net#更新最佳模型
         #学习率递减
         scheduler.step(eval_loss)#LR需要的
         current_lr=optimizer.state_dict()['param_groups'][0]['lr']
         eval_losses.append(eval_loss)
-        writer.add_scalar('evalloss', eval_loss, i)
-        print('epoch: {}, trainloss: {}, evalloss: {}, current_lr: {}'.format(i, train_loss / len(train_data), eval_loss / len(test_data),current_lr))
+        TBwriter.add_scalar('evalloss', eval_loss, i)
+        print('epoch: {}, trainloss: {}, evalloss: {}, current_lr: {}'.format(i, train_loss, eval_loss,current_lr))
         # update Draw
         num = np.random.randint(0, edata.shape[0])
         yy = y_pred.detach().numpy()
         el = elabel.detach().numpy()
+        wavelength=np.linspace(1200, 1700, elabel.shape[1])
+        # plt.cla()
         plt.clf()
-        plt.plot(yy[num, :])
-        plt.ion()
-        plt.plot(el[num, :])
-        plt.legend(['pred', 'ori'])
+        ax = fig.add_subplot(1, 1, 1, facecolor='white')
+        frame1, = ax.plot(wavelength,yy[num, :], color='deepskyblue')
+        frame2, = ax.plot(wavelength,el[num, :], color='tomato')
+        str = 'epoch:{},eval_loss:{}'.format(i, round(eval_loss, 5))
+        frame1.axes.title.set_text(str)
+        # ax.set_title(str)
+        ax.legend(['pred', 'ori'])
+        # plt.title('epoch:{},eval_loss:{}'.format(i,round(eval_loss,5)))
+        ims.append([frame1,frame2])
         plt.pause(0.01)
-        plt.ioff()
-    #
-    # num = 5
-    # y_pred = net(edata)
-    # yy = y_pred.detach().numpy()
-    # el = elabel.detach().numpy()
-    # plt.figure()
-    # plt.plot(yy[num,:])
-    # plt.ion()
-    # plt.plot(el[num,:])
-    # plt.legend(['pred','ori'])
-    # plt.ioff()
-    # plt.show()
+
+
     # #保存模型
+    ani = animation.ArtistAnimation(fig, ims, interval=1000)  # 生成动画
+    # 保存成gif
+    ani.save("pendulum.gif", writer='pillow')
     torch.save(best_net,'decoder_net.pth')
