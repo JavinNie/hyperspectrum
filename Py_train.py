@@ -34,11 +34,11 @@ def Dataset_Gen(N_samples):
     x=(np.arange(0,m)-m/2)*4/m
     for ii in range(N_samples):
         # sig 1
-        u=np.random.rand()*x.max()
+        u=np.random.rand()*x.max()-x.max()/2
         d=np.random.rand()/2
         sig = Gaussian(x, u, d)
         # sig 2
-        u=np.random.rand()*x.max()
+        u=np.random.rand()*x.max()-x.max()/2
         d=np.random.rand()/2
         sig = sig+Gaussian(x, u, d)
         # norm
@@ -50,6 +50,9 @@ def Dataset_Gen(N_samples):
         # plt.plot(para_set.T)
         # plt.show()
     para_set=np.array(paraset)#每个点的数值不超过1，因此将其除以总点数，避免因为点数多少，影响幅值高低
+    #norm
+    para_set=para_set/para_set.max()
+
     label_set = np.array(labelset)
     return para_set,label_set
 
@@ -114,9 +117,9 @@ class Net(torch.nn.Module):  # 继承 torch 的 Module
         self.layer1 = torch.nn.Linear(n_feature, 64)  #
         self.layer2 = torch.nn.Linear(64, 256)  #
         self.layer3 = torch.nn.Linear(256, 512)
-        self.layer4 = torch.nn.Linear(512, 256)
-        self.layer5 = torch.nn.Linear(256, 64)
-        self.layer6 = torch.nn.Linear(64, n_output)
+        self.layer4 = torch.nn.Linear(512, n_output)
+        # self.layer5 = torch.nn.Linear(256, 64)
+        # self.layer6 = torch.nn.Linear(64, n_output)
     def forward(self, x):  # 这同时也是 Module 中的 forward 功能
         # x = x.to(torch.float32)
         x1 = self.layer1(x)
@@ -126,10 +129,10 @@ class Net(torch.nn.Module):  # 继承 torch 的 Module
         x = self.layer3(x)
         x = torch.relu(x)  #
         x = self.layer4(x)
-        x = torch.relu(x)  #
-        x = self.layer5(x)
-        x = torch.relu(x) #
-        x = self.layer6(x)
+        # x = torch.relu(x)  #
+        # x = self.layer5(x)
+        # x = torch.relu(x) #
+        # x = self.layer6(x)
         return x
 
 # 网络初始化配置
@@ -181,9 +184,10 @@ if __name__ == "__main__":
     net.apply(weight_init)
 
     # # 定义优化器, SGD Adam等
-    # optimizer = torch.optim.SGD(net.parameters(), lr=1e-3, momentum=0.9)  # , weight_decay=1e-4)
-    optimizer = torch.optim.Adam(net.parameters(), lr=5e-3, betas=(0.5, 0.99))
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    # optimizer = torch.optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-2, betas=(0.5, 0.99))
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
     # # 调用损失函数
     # criterion = My_loss()
@@ -209,7 +213,6 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
             # # 累计单批次误差
             train_loss = train_loss + loss.item()
             ibatch = ibatch + 1
@@ -229,12 +232,14 @@ if __name__ == "__main__":
         if eval_loss<best_eval_loss:
             best_net=net
             best_eval_loss=eval_loss
-        net=best_net#更新最佳模型
+        # net=best_net#更新最佳模型
+        #学习率递减
+        scheduler.step(eval_loss)#LR需要的
         current_lr=optimizer.state_dict()['param_groups'][0]['lr']
         eval_losses.append(eval_loss)
         writer.add_scalar('evalloss', eval_loss, i)
         print('epoch: {}, trainloss: {}, evalloss: {}, current_lr: {}'.format(i, train_loss / len(train_data), eval_loss / len(test_data),current_lr))
-        # Draw
+        # update Draw
         num = np.random.randint(0, edata.shape[0])
         yy = y_pred.detach().numpy()
         el = elabel.detach().numpy()
