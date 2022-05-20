@@ -2,10 +2,10 @@
 %% 抗噪测试
 %% 加载滤波器矩阵5 --best-best
 tic
-load('D:\document\Research\Sprctrum\3D_data\Au_LC32_2.mat')
-A=Au_LC32_2;
+% load('D:\document\Research\Sprctrum\3D_data\Au_LC32_2.mat')
+% A=Au_LC32_2;
 % A=SpecFilters16;%滤波器矩阵，每一列是一个滤波器特性曲线
-% load('FilterHX.mat')
+load('FilterHX.mat')
 A=A;
 global DNN_train_flag
 DNN_train_flag=0;
@@ -30,8 +30,8 @@ sig=test_sig_gen(m);
 
 %% 重建测试,计算抗噪能力和重建效果
 
-reconstruct_fun=@PINV_methods;
-% reconstruct_fun=@DNN_methods;
+% reconstruct_fun=@PINV_methods;
+reconstruct_fun=@DNN_methods;
 [SNR_lower,corr_coe_recons]=Noise_resist_test(sig,A,reconstruct_fun,wavelength,plot_flag);
 
 disp(['滤波器自身相关度(0~1):' num2str(ave_corr)])

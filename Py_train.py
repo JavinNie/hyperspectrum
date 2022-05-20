@@ -16,7 +16,7 @@ import matplotlib.animation as animation
 import os
 
 # 加载生成数据集
-def Dataset_Gen(N_samples):
+def Dataset_Gen(N_samples,noise_flag):
     # 加载滤波器
     dataFile = 'Filter.mat'
     data = scio.loadmat(dataFile)
@@ -40,7 +40,9 @@ def Dataset_Gen(N_samples):
         sig = sig * 1/(sig.max()+1e-10)
         coded_sig=np.dot(Filter,sig)
         #噪声
-        coded_sig=wgn(coded_sig, snr=30)
+        if noise_flag==1:
+            coded_sig=wgn(coded_sig, snr=50)
+
         paraset.append(coded_sig)
         labelset.append(sig)
         # # 双峰的就行
@@ -183,7 +185,7 @@ class EarlyStopping:
             self.counter += 1
             print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience/2:
-                optimizer.param_groups[0]['lr'] *= 0.5
+                optimizer.param_groups[0]['lr'] *= 0.2
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -215,7 +217,8 @@ if __name__ == "__main__":
     strat = time.perf_counter()
     # 加载数据集。输入输出划分
     N_sample=100000
-    features,labels = Dataset_Gen(N_sample)
+    noise_flag=1
+    features,labels = Dataset_Gen(N_sample,noise_flag)
 
     # 数据集。训练测试划分
     train_features, test_features = train_test_split(features, test_size=0.1, shuffle=True, random_state=0)
@@ -274,7 +277,7 @@ if __name__ == "__main__":
     early_stopping = EarlyStopping(save_path)
 
     # 循环训练
-    for i in range(1000):
+    for i in range(300):
         train_loss = 0
         for tdata, tlabel in train_data:
             # 前向传播
