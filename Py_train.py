@@ -8,21 +8,17 @@ from torch.utils.data import DataLoader, TensorDataset
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FFMpegWriter
 from torch.utils.tensorboard import SummaryWriter
 import scipy.io as scio
 from datetime import datetime
 from sklearn.utils import shuffle as reset
-from scipy.interpolate import interpn
-from sklearn.preprocessing import MinMaxScaler
-from sklearn import metrics
 import matplotlib.animation as animation
 
 
 # 加载生成数据集
 def Dataset_Gen(N_samples):
     # 加载滤波器
-    dataFile = 'FilterHX.mat'
+    dataFile = 'Filter.mat'
     data = scio.loadmat(dataFile)
     Filter = np.array(data['A']).T
     n=Filter.shape[0] #行数目，即每个滤波器的采样点数
@@ -37,12 +33,14 @@ def Dataset_Gen(N_samples):
         num_peak=np.random.randint(1,8)
         sig=0
         for ii in range(num_peak):
-            u = np.random.rand() * x.max() - x.max() / 2
+            u = np.random.rand() * (x.max() - x.min()) +x.min()
             d = np.random.rand() / 2
             sig = sig+Gaussian(x, u, d)
         # norm
         sig = sig * 1/(sig.max()+1e-10)
         coded_sig=np.dot(Filter,sig)
+        #噪声
+        coded_sig=wgn(coded_sig, snr=30)
         paraset.append(coded_sig)
         labelset.append(sig)
         # # 双峰的就行
@@ -59,7 +57,12 @@ def Dataset_Gen(N_samples):
 
     label_set = np.array(labelset)
     return para_set,label_set
-
+def wgn(x, snr):
+    len_x, = x.shape
+    Ps = np.sum(np.power(x, 2)) / len_x
+    Pn = Ps / (np.power(10, snr / 10))
+    noise = np.random.randn(len_x) * np.sqrt(Pn)
+    return x + noise
 def Gaussian(x, u, d):
     """
     参数:
@@ -190,7 +193,7 @@ if __name__ == "__main__":
 
     # # 定义优化器, SGD Adam等
     # optimizer = torch.optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
-    optimizer = torch.optim.Adam(net.parameters(), lr=5e-3, betas=(0.5, 0.99))
+    optimizer = torch.optim.Adam(net.parameters(), lr=5e-2, betas=(0.5, 0.99))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
@@ -207,10 +210,12 @@ if __name__ == "__main__":
     best_eval_loss=1e10
     ibatch = 0
     #draw
-    fig = plt.figure(figsize=(5, 5))
-    # ax = fig.add_subplot(1, 1, 1, facecolor='white')
-    plt.rcParams['font.size'] = 15
-    ims = []  # 将每一帧都存进去
+    draw_flag=1
+    if draw_flag == 1:
+        fig = plt.figure(figsize=(5, 5))
+        # ax = fig.add_subplot(1, 1, 1, facecolor='white')
+        plt.rcParams['font.size'] = 15
+        ims = []  # 将每一帧都存进去
     # 循环训练
     for i in range(100):
         train_loss = 0
@@ -249,22 +254,23 @@ if __name__ == "__main__":
         TBwriter.add_scalar('evalloss', eval_loss, i)
         print('epoch: {}, trainloss: {}, evalloss: {}, current_lr: {}'.format(i, train_loss, eval_loss,current_lr))
         # update Draw
-        num = np.random.randint(0, edata.shape[0])
-        yy = y_pred.detach().numpy()
-        el = elabel.detach().numpy()
-        wavelength=np.linspace(1200, 1700, elabel.shape[1])
-        # plt.cla()
-        plt.clf()
-        ax = fig.add_subplot(1, 1, 1, facecolor='white')
-        frame1, = ax.plot(wavelength,yy[num, :], color='deepskyblue')
-        frame2, = ax.plot(wavelength,el[num, :], color='tomato')
-        str = 'epoch:{},eval_loss:{}'.format(i, round(eval_loss, 5))
-        frame1.axes.title.set_text(str)
-        # ax.set_title(str)
-        ax.legend(['pred', 'ori'])
-        # plt.title('epoch:{},eval_loss:{}'.format(i,round(eval_loss,5)))
-        ims.append([frame1,frame2])
-        plt.pause(0.01)
+        if draw_flag==1:
+            num = np.random.randint(0, edata.shape[0])
+            yy = y_pred.detach().numpy()
+            el = elabel.detach().numpy()
+            wavelength=np.linspace(1200, 1700, elabel.shape[1])
+            # plt.cla()
+            plt.clf()
+            ax = fig.add_subplot(1, 1, 1, facecolor='white')
+            frame1, = ax.plot(wavelength,yy[num, :], color='deepskyblue')
+            frame2, = ax.plot(wavelength,el[num, :], color='tomato')
+            str = 'epoch:{},eval_loss:{}'.format(i, round(eval_loss, 5))
+            frame1.axes.title.set_text(str)
+            # ax.set_title(str)
+            ax.legend(['pred', 'ori'])
+            # plt.title('epoch:{},eval_loss:{}'.format(i,round(eval_loss,5)))
+            ims.append([frame1,frame2])
+            plt.pause(0.01)
 
 
     # #保存模型
