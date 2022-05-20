@@ -2,10 +2,10 @@
 %% 抗噪测试
 %% 加载滤波器矩阵5 --best-best
 tic
-% load('D:\document\Research\Sprctrum\3D_data\Au_LC32_2circle.mat')
-% A=Au_LC32_2circle;
+load('D:\document\Research\Sprctrum\3D_data\Au_LC32_2.mat')
+A=Au_LC32_2;
 % A=SpecFilters16;%滤波器矩阵，每一列是一个滤波器特性曲线
-load('FilterHX.mat')
+% load('FilterHX.mat')
 A=A;
 global DNN_train_flag
 DNN_train_flag=0;
@@ -30,8 +30,8 @@ sig=test_sig_gen(m);
 
 %% 重建测试,计算抗噪能力和重建效果
 
-% reconstruct_fun=@PINV_methods;
-reconstruct_fun=@DNN_methods;
+reconstruct_fun=@PINV_methods;
+% reconstruct_fun=@DNN_methods;
 [SNR_lower,corr_coe_recons]=Noise_resist_test(sig,A,reconstruct_fun,wavelength,plot_flag);
 
 disp(['滤波器自身相关度(0~1):' num2str(ave_corr)])
@@ -43,6 +43,10 @@ toc
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% 子函数0.0
 function status=DNN_train(A)
+    [m,n]=size(A);%行数 %列数
+    if m<n
+        A=A';
+    end
     save('Filter.mat','A')
     command = 'python Py_train.py';
     status = system(command);
@@ -110,7 +114,7 @@ for ii=1:r
         sig_origin((ii-1)*c+jj,:)=sig;
 
         if(plot_flag)
-            subplot(3,4,4*(ii-1)+jj)
+            subplot(r,c,c*(ii-1)+jj)
             plot(x,sig_sim,'r','LineWidth',2);
             hold on
             plot(x,sig,'b','LineWidth',1);
@@ -129,8 +133,14 @@ if(plot_flag)
     figure
 end
 corr_coe=0;
-SNR=0;%dB SNR=10*log10(Ps/Pnoise),Ps=Pnoise*10^(SNR/10)
-while(corr_coe<0.99||SNR>200)
+SNR_upper=200;%dB SNR=10*log10(Ps/Pnoise),Ps=Pnoise*10^(SNR/10)
+SNR_lower=0;
+SNR=mean([SNR_lower,SNR_upper]);
+SNR_old=0;
+SNR_counting=0;
+% corr_coe<0.99||SNR>20
+corr_thres=0.99;
+while(SNR_counting<=10)
     for ii=1:r
         for jj=1:c
             sig=SIG(ii,:,jj)';
@@ -143,7 +153,7 @@ while(corr_coe<0.99||SNR>200)
             sig_rc_test((ii-1)*c+jj,:)=sig_sim;
     
             if(plot_flag)
-                subplot(3,4,4*(ii-1)+jj)
+                subplot(r,c,c*(ii-1)+jj)
                 plot(x,sig_sim,'r','LineWidth',2);
                 hold on
                 plot(x,sig,'b','LineWidth',1);
@@ -153,10 +163,18 @@ while(corr_coe<0.99||SNR>200)
             end   
         end
     end
+    SNR_counting=SNR_counting+1;
     corr_coe=corr2(sig_rc_test,sig_rc0);
-    SNR=SNR+10;
+    if corr_coe>corr_thres
+        SNR_upper=SNR;
+        SNR=mean([SNR_lower,SNR_upper]);
+    else
+        SNR_lower=SNR;
+        SNR=mean([SNR_lower,SNR_upper]);
+    end
+
 end
-SNR_limit=SNR-10;%波形抗噪不失真所需的最低信噪比
+SNR_limit=SNR;%波形抗噪不失真所需的最低信噪比
 end
 
 %% 子函数3
@@ -232,7 +250,7 @@ function signal=test_sig_gen(m)
 x=((1:m)-m/2)*4/m;
 
 % para=[];
-signal=zeros(3,m,4);
+signal=zeros(3,m,3);
 
 % figure
 
@@ -249,34 +267,34 @@ for jj=1:3
 
 end
 
-% 多峰数目
-n_peak=[3,5,10];
-for jj=1:3
-    np=n_peak(jj);
-    mul=((1:np)-np/2-0.5)*max(x)*2/np;
-    sigma=1/10*ones(1,np);
-    Amp=ones(1,np);
-    sig=mul_gaussian(mul,sigma,Amp,m);
+% % 多峰数目
+% n_peak=[3,5,10];
+% for jj=1:3
+%     np=n_peak(jj);
+%     mul=((1:np)-np/2-0.5)*max(x)*2/np;
+%     sigma=1/10*ones(1,np);
+%     Amp=ones(1,np);
+%     sig=mul_gaussian(mul,sigma,Amp,m);
+% 
+%     Amp=1/max(sig);
+%     sig=Amp*sig;
+%     
+%     signal(jj,:,2)=sig;%多峰数目
+% 
+% end
 
-    Amp=1/max(sig);
-    sig=Amp*sig;
-    
-    signal(jj,:,2)=sig;%多峰数目
-
-end
-
-% 多峰间距
-gap_peak=[3,5,10];
+% 双峰间距
+gap_peak=[3,5,8];
 for jj=1:3
     gp=gap_peak(jj);
-    mul=((1:3)-3/2-0.5)*max(x)*1.5/gp;
-    sigma=1/15*ones(1,3);   
-    Amp=ones(1,3);
+    mul=((1:2)-1-0.5)*max(x)*1.5/gp;
+    sigma=1/8*ones(1,2);   
+    Amp=ones(1,2);
     sig=mul_gaussian(mul,sigma,Amp,m);
     Amp=1/max(sig);
     sig=Amp*sig;
 
-    signal(jj,:,3)=sig;%多峰间距
+    signal(jj,:,2)=sig;%多峰间距
 
 end
 
@@ -291,7 +309,7 @@ for jj=1:3
     Amp=1/max(sig);
     sig=Amp*sig;
 
-    signal(jj,:,4)=sig;%两个峰均值差1:1, 1:5, 1:10;
+    signal(jj,:,3)=sig;%两个峰均值差1:1, 1:5, 1:10;
 
 end
 end
