@@ -13,7 +13,7 @@ import scipy.io as scio
 from datetime import datetime
 from sklearn.utils import shuffle as reset
 import matplotlib.animation as animation
-
+import os
 
 # 加载生成数据集
 def Dataset_Gen(N_samples):
@@ -149,6 +149,58 @@ def weight_init(m):
         torch.nn.init.xavier_uniform_(m.weight)  # , sparsity=0.1)#(m.weight)
         torch.nn.init.constant_(m.bias,0)
 
+
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience."""
+    def __init__(self, save_path, patience=7, verbose=False, delta=0):
+        """
+        Args:
+            save_path : 模型保存文件夹
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement.
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+        """
+        self.save_path = save_path
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+
+    def __call__(self, val_loss, model,optimizer):
+
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience/2:
+                optimizer.param_groups[0]['lr'] *= 0.5
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+        return optimizer
+
+    def save_checkpoint(self, val_loss, model):
+        '''Saves model when validation loss decrease.'''
+        if self.verbose:
+            print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        path = os.path.join(self.save_path, 'decoder_net.pth')
+        # torch.save(model.state_dict(), path)# 这里会存储迄今最优模型的参数
+        torch.save(model, 'decoder_net.pth')
+        self.val_loss_min = val_loss
+
 ##################################主函数########################################
 if __name__ == "__main__":
     # 设置字体为楷体
@@ -193,7 +245,7 @@ if __name__ == "__main__":
 
     # # 定义优化器, SGD Adam等
     # optimizer = torch.optim.SGD(net.parameters(), lr=1e-1, momentum=0.9)  # , weight_decay=1e-4)
-    optimizer = torch.optim.Adam(net.parameters(), lr=5e-2, betas=(0.5, 0.99))
+    optimizer = torch.optim.Adam(net.parameters(), lr=1e-3, betas=(0.5, 0.99))
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
@@ -201,23 +253,28 @@ if __name__ == "__main__":
     # criterion = My_loss()
     criterion = torch.nn.MSELoss(reduction='mean')
 
-    # # 记录损失
+    # # 记录损失值
     losses = []  # 记录每次迭代后训练的loss
     eval_losses = []  # 测试的
+
     # tensorboard定义及调用命令
     TBwriter = SummaryWriter('./log')
     # tensorboard - -logdir =./ log
     best_eval_loss=1e10
     ibatch = 0
     #draw
-    draw_flag=1
+    draw_flag=0
     if draw_flag == 1:
         fig = plt.figure(figsize=(5, 5))
         # ax = fig.add_subplot(1, 1, 1, facecolor='white')
         plt.rcParams['font.size'] = 15
         ims = []  # 将每一帧都存进去
+    # 早停止函数
+    save_path = ".\\"  # 当前目录下
+    early_stopping = EarlyStopping(save_path)
+
     # 循环训练
-    for i in range(100):
+    for i in range(1000):
         train_loss = 0
         for tdata, tlabel in train_data:
             # 前向传播
@@ -271,10 +328,15 @@ if __name__ == "__main__":
             # plt.title('epoch:{},eval_loss:{}'.format(i,round(eval_loss,5)))
             ims.append([frame1,frame2])
             plt.pause(0.01)
-
-
+        # 早停止
+        optimizer=early_stopping(eval_loss, net,optimizer)
+        # 达到早停止条件时，early_stop会被置为True
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break  # 跳出迭代，结束训练
+    if draw_flag==1:
+        ani = animation.ArtistAnimation(fig, ims, interval=1000)  # 生成动画
+        # 保存成gif
+        ani.save("pendulum.gif", writer='pillow')
     # #保存模型
-    ani = animation.ArtistAnimation(fig, ims, interval=1000)  # 生成动画
-    # 保存成gif
-    ani.save("pendulum.gif", writer='pillow')
     torch.save(best_net,'decoder_net.pth')
