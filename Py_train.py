@@ -32,7 +32,7 @@ def Dataset_Gen(N_samples,noise_flag):
     for ii in range(N_samples):
         num_peak=np.random.randint(1,8)
         sig=0
-        for ii in range(num_peak):
+        for jj in range(num_peak):
             u = np.random.rand() * (x.max() - x.min()) +x.min()
             d = np.random.rand() / 2
             sig = sig+Gaussian(x, u, d)
